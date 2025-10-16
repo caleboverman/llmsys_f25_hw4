@@ -44,8 +44,11 @@ class MultiHeadAttention(Module):
         self.causal    = causal
         self.attn_hidden_dim = n_embd // n_head
 
-        # COPY FROM ASSIGN2_4
-        raise NotImplementedError
+        self.q_projection = Linear(n_embd, n_embd, bias=bias, backend=backend)
+        self.k_projection = Linear(n_embd, n_embd, bias=bias, backend=backend)
+        self.v_projection = Linear(n_embd, n_embd, bias=bias, backend=backend)
+        self.out_projection = Linear(n_embd, n_embd, bias=bias, backend=backend)
+        self.dropout = Dropout(p_dropout)
 
     def create_causal_mask(self, bs, nh, seq_len):
         """
@@ -68,8 +71,22 @@ class MultiHeadAttention(Module):
         """
         batch_size, seq_len, n_embd = x.shape
         
-        # COPY FROM ASSIGN2_4
-        raise NotImplementedError
+        x2d = x.contiguous().view(batch_size * seq_len, n_embd)
+
+        q2d = self.q_projection(x2d)
+        k2d = self.k_projection(x2d)
+        v2d = self.v_projection(x2d)
+
+        q = q2d.view(batch_size, seq_len, self.n_head, self.attn_hidden_dim)
+        q = q.permute(0, 2, 1, 3).contiguous()
+
+        k = k2d.view(batch_size, seq_len, self.n_head, self.attn_hidden_dim)
+        k = k.permute(0, 2, 1, 3).contiguous()
+
+        v = v2d.view(batch_size, seq_len, self.n_head, self.attn_hidden_dim)
+        v = v.permute(0, 2, 1, 3).contiguous()
+
+        kT = k.permute(0, 1, 3, 2).contiguous()
         
         return q, kT, v
 
@@ -114,8 +131,9 @@ class MultiHeadAttention(Module):
             output : Tensor of shape (batch_size, seq_len, embedding_dim)
         """
         batch_size, seq_len, n_embd = x.shape
-        # COPY FROM ASSIGN2_4
-        raise NotImplementedError
+        q, kT, v = self.project_to_query_key_value(x)
+        out = self.self_attention(q, kT, v)
+        return out
 
 
 class FeedForward(Module):
@@ -134,8 +152,9 @@ class FeedForward(Module):
             linear_out : second linear layer
             dropout    : dropout layer
         """
-        # COPY FROM ASSIGN2_4
-        raise NotImplementedError
+        self.linear_in  = Linear(n_embd, middle_dim, bias=bias, backend=backend)
+        self.linear_out = Linear(middle_dim, n_embd, bias=bias, backend=backend)
+        self.dropout    = Dropout(p_dropout)
 
     def forward(self, x):
         """A FFN Module in a Pre-LN Transformer with GELU Activation and dropout.
@@ -148,8 +167,11 @@ class FeedForward(Module):
         """
         batch_size, seq_len, n_embd = x.shape
 
-        # COPY FROM ASSIGN2_4
-        raise NotImplementedError
+        x = x.contiguous().view(batch_size * seq_len, n_embd)
+        x = GELU(self.linear_in(x))
+        x = self.linear_out(x)
+        x = self.dropout(x)
+        x = x.view(batch_size, seq_len, n_embd)
 
         return x
 
