@@ -406,7 +406,30 @@ class CudaKernelOps(TensorOps):
     @staticmethod
     def attn_softmax_bw(out_grad: Tensor, soft_inp: Tensor):
       #   BEGIN ASSIGN4_1_2
-      raise("Not implemented")
+      out_grad = out_grad.contiguous()
+      soft_inp = soft_inp.contiguous()
+      rows = int(np.prod(out_grad.shape[:-1]))
+      softmax_len = out_grad.shape[-1]
+      stream_1 = ctypes.c_void_p(torch.cuda.current_stream().cuda_stream)
+
+      lib_softmax.launch_attn_softmax_bw.argtypes = [
+        np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
+        np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_void_p
+      ]
+      lib_softmax.launch_attn_softmax_bw.restype = None
+
+      lib_softmax.launch_attn_softmax_bw(
+        out_grad._tensor._storage,
+        soft_inp._tensor._storage,
+        rows,
+        softmax_len,
+        stream_1
+      )
+
+      return out_grad
       #   END ASSIGN4_1_2
 
     @staticmethod

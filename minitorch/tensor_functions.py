@@ -391,7 +391,10 @@ class Attn_Softmax(Function):
     @staticmethod
     def backward(ctx: Context, out_grad: Tensor) -> Tensor:
       #   BEGIN ASSIGN4_1_2
-      raise NotImplementedError("Need to implement for Assignment 3")
+      inp, mask = ctx.saved_values
+      grad = out_grad.f.attn_softmax_bw(out_grad, inp)
+      zero_mask = mask.zeros(mask.shape) if hasattr(mask, "zeros") else mask * 0.0
+      return grad, zero_mask
       #   END ASSIGN4_1_2
 
 
