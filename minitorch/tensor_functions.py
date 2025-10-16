@@ -136,7 +136,9 @@ class PowerScalar(Function):
                 Tensor containing the result of raising every element of a to scalar.
         """
         # COPY FROM ASSIGN3
-        raise NotImplementedError
+        assert scalar.size == 1, "Scalar exponent must be a single value"
+        ctx.save_for_backward(a, scalar)
+        return a.f.pow_scalar_zip(a, scalar)
 
     @staticmethod
     def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, float]:
@@ -159,9 +161,14 @@ class PowerScalar(Function):
         """
         a, scalar = ctx.saved_values
         grad_a    = None
-        
+
         # COPY FROM ASSIGN3
-        raise NotImplementedError
+        exponent = scalar.item()
+        pow_minus_one = Tensor.make([exponent - 1.0], (1,), backend=a.backend)
+        exp_tensor = Tensor.make([exponent], (1,), backend=a.backend)
+        apow = grad_output.f.pow_scalar_zip(a, pow_minus_one)
+        grad_a = grad_output.f.mul_zip(grad_output, apow)
+        grad_a = grad_output.f.mul_zip(grad_a, exp_tensor)
 
         return (grad_a, 0.0)
 
