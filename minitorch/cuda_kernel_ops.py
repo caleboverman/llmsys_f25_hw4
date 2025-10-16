@@ -514,7 +514,6 @@ class CudaKernelOps(TensorOps):
         np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
         np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
         np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
-        ctypes.c_void_p,
         np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
         np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
         np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
@@ -527,14 +526,11 @@ class CudaKernelOps(TensorOps):
       ]
       lib_layernorm.launch_layernorm_bw.restype = None
 
-      zero_ptr = ctypes.c_void_p(0)
-
       lib_layernorm.launch_layernorm_bw(
         gamma_grad._tensor._storage,
         beta_grad._tensor._storage,
         inp_grad._tensor._storage,
         flat_out_grad._tensor._storage,
-        zero_ptr,
         flat_inp._tensor._storage,
         flat_gamma._tensor._storage,
         flat_beta._tensor._storage,
