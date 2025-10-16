@@ -484,6 +484,65 @@ class CudaKernelOps(TensorOps):
     @staticmethod
     def layernorm_bw(out_grad: Tensor, inp: Tensor, gamma: Tensor, beta: Tensor, var: Tensor, mean: Tensor):
       #   BEGIN ASSIGN4_2_2
-      raise("Not implemented")
+      out_grad_c = out_grad.contiguous()
+      inp_c = inp.contiguous()
+      gamma_c = gamma.contiguous()
+      beta_c = beta.contiguous()
+      var_c = var.contiguous()
+      mean_c = mean.contiguous()
+
+      orig_shape = out_grad_c.shape
+      rows = int(np.prod(orig_shape[:-1])) if len(orig_shape) > 1 else 1
+      hidden_dim = int(orig_shape[-1]) if len(orig_shape) > 0 else 1
+
+      flat_out_grad = out_grad_c.view(rows, hidden_dim)
+      flat_inp = inp_c.view(rows, hidden_dim)
+      flat_gamma = gamma_c.view(hidden_dim)
+      flat_beta = beta_c.view(hidden_dim)
+      flat_var = var_c.view(rows)
+      flat_mean = mean_c.view(rows)
+
+      gamma_grad = gamma.zeros(gamma.shape)
+      beta_grad = beta.zeros(beta.shape)
+      inp_grad = inp.zeros(inp.shape)
+
+      stream_1 = ctypes.c_void_p(torch.cuda.current_stream().cuda_stream)
+      stream_2 = stream_1
+
+      lib_layernorm.launch_layernorm_bw.argtypes = [
+        np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
+        np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
+        np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
+        np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
+        np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
+        np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
+        np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
+        np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
+        np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
+        np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        ctypes.c_void_p
+      ]
+      lib_layernorm.launch_layernorm_bw.restype = None
+
+      lib_layernorm.launch_layernorm_bw(
+        gamma_grad._tensor._storage,
+        beta_grad._tensor._storage,
+        inp_grad._tensor._storage,
+        flat_out_grad._tensor._storage,
+        flat_inp._tensor._storage,
+        flat_gamma._tensor._storage,
+        flat_beta._tensor._storage,
+        flat_var._tensor._storage,
+        flat_mean._tensor._storage,
+        rows,
+        hidden_dim,
+        stream_1,
+        stream_2
+      )
+
+      return inp_grad, gamma_grad, beta_grad
       #   END ASSIGN4_2_2
       
