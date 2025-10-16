@@ -38,25 +38,63 @@ __global__ void ker_layer_norm(T *ln_res, T *vars, T *means, const T *inp,
                                const T *scale, const T *bias, int hidden_size) {
   
   /// BEGIN ASSIGN4_2_1
-  /// TODO
-  // Hints:
-  // 1. Compute x and x^2 with reinterpret_cast by casting to float4 for speedup
-  // 2. Compute reduce sum with blockReduce and add epsilon with LN_EPSILON
-  // 3. Compute layernorm result with reinterpret_cast by casting to float4 for speedup
-  
-  // Step 1
-  float l_sum = 0;
-  const float4 *inp_f4 = reinterpret_cast<const float4 *>(inp) + blockIdx.x * hidden_size;  
-  for (uint idx = threadIdx.x; idx < hidden_size; idx += blockDim.x) {
+  int row = blockIdx.x;
+  const int vec_per_row = hidden_size;
+  const int elems_per_row = vec_per_row * 4;
+
+  const float4 *inp_f4 = reinterpret_cast<const float4 *>(inp) + row * vec_per_row;
+  const float4 *scale_f4 = reinterpret_cast<const float4 *>(scale);
+  const float4 *bias_f4 = reinterpret_cast<const float4 *>(bias);
+  float4 *out_f4 = reinterpret_cast<float4 *>(ln_res) + row * vec_per_row;
+
+  float stats[2] = {0.f, 0.f};
+  for (int idx = threadIdx.x; idx < vec_per_row; idx += blockDim.x) {
     float4 val = inp_f4[idx];
-    l_sum += val.x + val.y + val.z + val.w;
+    stats[0] += val.x + val.y + val.z + val.w;
+    stats[1] += val.x * val.x + val.y * val.y + val.z * val.z + val.w * val.w;
   }
 
-  // Step 2
+  blockReduce<ReduceType::kSum, 2>(stats);
 
-  // Step 3
-  
-  assert(false && "Not Implemented");
+  __shared__ float shared_mean;
+  __shared__ float shared_rsqrt_var;
+  __shared__ float shared_var;
+
+  if (threadIdx.x == 0) {
+    float mean = stats[0] / static_cast<float>(elems_per_row);
+    float var = stats[1] / static_cast<float>(elems_per_row) - mean * mean;
+    shared_mean = mean;
+    shared_var = var;
+    shared_rsqrt_var = rsqrtf(var + LN_EPSILON);
+    if (vars != nullptr) {
+      vars[row] = var;
+    }
+    if (means != nullptr) {
+      means[row] = mean;
+    }
+  }
+  __syncthreads();
+
+  float mean = shared_mean;
+  float inv_std = shared_rsqrt_var;
+
+  for (int idx = threadIdx.x; idx < vec_per_row; idx += blockDim.x) {
+    float4 val = inp_f4[idx];
+    float4 gamma = scale_f4[idx];
+    float4 beta = bias_f4[idx];
+
+    val.x = (val.x - mean) * inv_std;
+    val.y = (val.y - mean) * inv_std;
+    val.z = (val.z - mean) * inv_std;
+    val.w = (val.w - mean) * inv_std;
+
+    val.x = val.x * gamma.x + beta.x;
+    val.y = val.y * gamma.y + beta.y;
+    val.z = val.z * gamma.z + beta.z;
+    val.w = val.w * gamma.w + beta.w;
+
+    out_f4[idx] = val;
+  }
   /// END ASSIGN4_2_1
 }
 

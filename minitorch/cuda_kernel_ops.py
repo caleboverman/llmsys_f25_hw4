@@ -435,7 +435,50 @@ class CudaKernelOps(TensorOps):
     @staticmethod
     def layernorm_fw(inp: Tensor, gamma: Tensor, beta: Tensor):
       #   BEGIN ASSIGN4_2_1
-      raise("Not implemented")
+      inp_c = inp.contiguous()
+      gamma_c = gamma.contiguous()
+      beta_c = beta.contiguous()
+
+      orig_shape = inp_c.shape
+      rows = int(np.prod(orig_shape[:-1])) if len(orig_shape) > 1 else 1
+      hidden_dim = int(orig_shape[-1]) if len(orig_shape) > 0 else 1
+
+      flat_inp = inp_c.view(rows, hidden_dim)
+      out = flat_inp.zeros(flat_inp.shape)
+      vars = inp.zeros((rows,))
+      means = inp.zeros((rows,))
+
+      stream_1 = ctypes.c_void_p(torch.cuda.current_stream().cuda_stream)
+
+      lib_layernorm.launch_layernorm.argtypes = [
+        np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
+        np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
+        np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
+        np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
+        np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
+        np.ctypeslib.ndpointer(dtype=datatype, ndim=1, flags='C_CONTIGUOUS'),
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_void_p
+      ]
+      lib_layernorm.launch_layernorm.restype = None
+
+      gamma_flat = gamma_c.view(gamma_c.size)
+      beta_flat = beta_c.view(beta_c.size)
+
+      lib_layernorm.launch_layernorm(
+        out._tensor._storage,
+        vars._tensor._storage,
+        means._tensor._storage,
+        flat_inp._tensor._storage,
+        gamma_flat._tensor._storage,
+        beta_flat._tensor._storage,
+        rows,
+        hidden_dim,
+        stream_1
+      )
+
+      return out.view(orig_shape), vars, means
       #   END ASSIGN4_2_1
       
     @staticmethod
