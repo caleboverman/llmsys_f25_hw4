@@ -478,7 +478,7 @@ class CudaKernelOps(TensorOps):
         stream_1
       )
 
-      return out.view(orig_shape), vars, means
+      return out.view(*orig_shape), vars, means
       #   END ASSIGN4_2_1
       
     @staticmethod
