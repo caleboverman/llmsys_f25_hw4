@@ -222,10 +222,11 @@ __global__ void ker_attn_softmax(T *inp, const T *attn_mask, int from_len,
         int col = threadIdx.x * ele_per_thread + j;
         if (col < to_len) {
           inp_val[i][j] = (T)(val[i][j] * inv_sum);
+        } else {
+          inp_val[i][j] = (T)0.f;
         }
       }
-      BlockStore(ts_store).Store(inp + (token_id + i) * to_len, inp_val[i], to_len,
-                                 REDUCE_FLOAT_INF_NEG);
+      BlockStore(ts_store).Store(inp + (token_id + i) * to_len, inp_val[i], to_len);
     }
     // END ASSIGN4_1_1
   }  // blockIdx.x
