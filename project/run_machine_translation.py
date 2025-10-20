@@ -121,16 +121,31 @@ def collate_batch(
         token_ids_tgt = tokenizer(
             f'{example[tgt_key]}<eos_{tgt_key}>')['input_ids']
 
-        # COPY FROM ASSIGN2_5
-        raise NotImplementedError("Collate Function Not Implemented Yet")
+        example_token_ids = token_ids_src + token_ids_tgt
+        example_tgt_token_mask = [0] * len(token_ids_src) + [1] * len(token_ids_tgt)
 
-    # COPY FROM ASSIGN2_5
-    raise NotImplementedError("Collate Function Not Implemented Yet")
+        example_token_ids = example_token_ids[:model_max_length]
+        example_tgt_token_mask = example_tgt_token_mask[:model_max_length]
+
+        pad_len = model_max_length - len(example_token_ids)
+        if pad_len > 0:
+            example_token_ids += [pad_token_id] * pad_len
+            example_tgt_token_mask += [0] * pad_len
+
+        token_ids.append(example_token_ids)
+        tgt_token_mask.append(example_tgt_token_mask)
+
+    token_ids = np.array(token_ids, dtype=np.int64)
+    tgt_token_mask = np.array(tgt_token_mask, dtype=np.float32)
+
+    input_ids = token_ids[:, :-1]
+    labels = token_ids[:, 1:]
+    label_token_weights = tgt_token_mask[:, 1:]
 
     return {
-        'input_ids': minitorch.zeros((len(examples), model_max_length)),
-        'labels': minitorch.zeros((len(examples), model_max_length)),
-        'label_token_weights': minitorch.zeros((len(examples), model_max_length))
+        'input_ids': minitorch.tensor_from_numpy(input_ids, backend=backend),
+        'labels': minitorch.tensor_from_numpy(labels, backend=backend),
+        'label_token_weights': minitorch.tensor_from_numpy(label_token_weights, backend=backend)
     }
 
 
