@@ -221,19 +221,19 @@ __global__ void ker_ln_bw_dgamma_dbetta(T *gamma_grad, T *betta_grad,
   gamma_buffer[threadIdx.y][threadIdx.x] = gamma_partial;
   __syncthreads();
 
+  float beta_sum = 0.f;
+  float gamma_sum = 0.f;
   if (col < width) {
-    float beta_sum = betta_buffer[threadIdx.y][threadIdx.x];
-    float gamma_sum = gamma_buffer[threadIdx.y][threadIdx.x];
-
-    for (int offset = TILE_DIM / 2; offset > 0; offset >>= 1) {
-      beta_sum += g.shfl_down(beta_sum, offset);
-      gamma_sum += g.shfl_down(gamma_sum, offset);
+    for (int i = 0; i < blockDim.y; ++i) {
+      beta_sum += betta_buffer[i][threadIdx.x];
+      gamma_sum += gamma_buffer[i][threadIdx.x];
     }
+  }
+  __syncthreads();
 
-    if (threadIdx.y == 0) {
-      betta_grad[col] = static_cast<T>(beta_sum);
-      gamma_grad[col] = static_cast<T>(gamma_sum);
-    }
+  if (threadIdx.y == 0 && col < width) {
+    betta_grad[col] = static_cast<T>(beta_sum);
+    gamma_grad[col] = static_cast<T>(gamma_sum);
   }
   /// END ASSIGN4_2_2
 }
