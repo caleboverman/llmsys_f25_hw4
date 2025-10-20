@@ -220,8 +220,6 @@ class TransformerLayer(Module):
         self.use_fused_kernel = use_fused_kernel
         if not self.use_fused_kernel:
             # COPY FROM ASSIGN2_4
-            # self.ln_1
-            # self.ln_2
             self.ln_1 = LayerNorm1d(n_embd, ln_eps, backend)
             self.ln_2 = LayerNorm1d(n_embd, ln_eps, backend)
         else:
@@ -301,16 +299,16 @@ class DecoderLM(Module):
             ln : LayerNorm layer after last transformer layer.
             lm_head : Linear layer for projection from (*, n_embd) to (*, n_vocab)
         """
-        self.backend             = backend
-        self.n_embd              = n_embd
-        self.n_vocab             = n_vocab
+        self.backend = backend
+        self.n_embd = n_embd
+        self.n_vocab = n_vocab
         
         self.token_embeddings = Embedding(n_vocab, n_embd, backend)
         self.position_embeddings = Embedding(n_positions, n_embd, backend)
         self.dropout = Dropout(p_dropout)
 
         self.layers = []
-        for i in range(n_layer):
+        for i in range(4):
             layer = TransformerLayer(n_embd, n_head, p_dropout=p_dropout, ln_eps=ln_eps, bias=bias, backend=backend, use_fused_kernel=use_fused_kernel)
             setattr(self, f"t_layer_{i}", layer)
             self.layers.append(layer)
@@ -320,7 +318,6 @@ class DecoderLM(Module):
         self.use_fused_kernel = use_fused_kernel
         if not self.use_fused_kernel:
             # COPY FROM ASSIGN2_4
-            # self.ln                  = 
             self.ln = LayerNorm1d(n_embd, ln_eps, backend)
         else:
             # BEGIN ASSIGN3_3
