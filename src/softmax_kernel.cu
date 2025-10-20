@@ -158,16 +158,14 @@ __global__ void ker_attn_softmax(T *inp, const T *attn_mask, int from_len,
 
       for (int j = 0; j < ele_per_thread; ++j) {
         int col = threadIdx.x * ele_per_thread + j;
-        float temp_val = REDUCE_FLOAT_INF_NEG;
+        float temp_val;
 
-        if (col < to_len) {
-          if (mask_future && col > token_id + i) {
-            temp_val = REDUCE_FLOAT_INF_NEG;
-          } else {
-            temp_val = static_cast<float>(inp_val[i][j]);
-            if (attn_mask) {
-              temp_val += static_cast<float>(mval[j]);
-            }
+        if (mask_future && col > token_id + i) {
+          temp_val = REDUCE_FLOAT_INF_NEG;
+        } else {
+          temp_val = static_cast<float>(inp_val[i][j]);
+          if (attn_mask) {
+            temp_val += static_cast<float>(mval[j]);
           }
         }
 
@@ -197,16 +195,9 @@ __global__ void ker_attn_softmax(T *inp, const T *attn_mask, int from_len,
       float max_val = s_max[i];
 
       for (int j = 0; j < ele_per_thread; ++j) {
-        int col = threadIdx.x * ele_per_thread + j;
-        float exp_val = 0.f;
-
-        if (col < to_len) {
-          exp_val = __expf(val[i][j] - max_val);
-          val[i][j] = exp_val;
-          l_sum[i] += exp_val;
-        } else {
-          val[i][j] = 0.f;
-        }
+        float exp_val = __expf(val[i][j] - max_val);
+        val[i][j] = exp_val;
+        l_sum[i] += exp_val;
       }
     }
     // END ASSIGN4_1_1
@@ -227,13 +218,7 @@ __global__ void ker_attn_softmax(T *inp, const T *attn_mask, int from_len,
       float inv_sum = s_sum[i];
 
       for (int j = 0; j < ele_per_thread; ++j) {
-        int col = threadIdx.x * ele_per_thread + j;
-
-        if (col < to_len) {
-          inp_val[i][j] = (T)(val[i][j] * inv_sum);
-        } else {
-          inp_val[i][j] = (T)0.f;
-        }
+        inp_val[i][j] = static_cast<T>(val[i][j] * inv_sum);
       }
       BlockStore(ts_store).Store(inp + (token_id + i) * to_len, inp_val[i], to_len);
     }
