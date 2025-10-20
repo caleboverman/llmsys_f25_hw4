@@ -166,9 +166,16 @@ def loss_fn(batch, model):
     
     logits = model(idx=idx)
     batch_size, seq_len, vocab_size = logits.shape
-    
-    # COPY FROM ASSIGN2_5
-    raise NotImplementedError("Loss Function Not Implemented Yet")
+
+    logits = logits.view(batch_size * seq_len, vocab_size)
+    targets = batch['labels'].view(batch_size * seq_len)
+    weights = batch['label_token_weights'].view(batch_size * seq_len)
+
+    loss = minitorch.nn.softmax_loss(logits=logits, target=targets)
+
+    weighted_loss = (loss * weights).sum()
+    normalizer = weights.sum()
+    return weighted_loss / normalizer
 
 
 def train(model, optimizer, examples, n_samples, collate_fn, batch_size, desc):
