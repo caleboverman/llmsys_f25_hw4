@@ -407,12 +407,6 @@ void launch_attn_softmax_bw(float *out_grad,
   cudaMemcpy(out_grad, d_grad, buf_size, cudaMemcpyDeviceToHost);
   cudaDeviceSynchronize();
 
-//   cudaError_t err = cudaGetLastError();
-//   if (err != cudaSuccess) {
-//     fprintf(stderr, "launch_attn_softmax_bw Error: %s\n", cudaGetErrorString(err));
-//     exit(EXIT_FAILURE);
-//   }
-
   cudaFree(d_grad);
   cudaFree(d_soft);
   // END ASSIGN4_1_2
