@@ -58,13 +58,11 @@ __global__ void ker_layer_norm(T *ln_res, T *vars, T *means, const T *inp,
 
   __shared__ float shared_mean;
   __shared__ float shared_rsqrt_var;
-  __shared__ float shared_var;
 
   if (threadIdx.x == 0) {
     float mean = stats[0] / static_cast<float>(elems_per_row);
     float var = stats[1] / static_cast<float>(elems_per_row) - mean * mean;
     shared_mean = mean;
-    shared_var = var;
     shared_rsqrt_var = rsqrtf(var + LN_EPSILON);
     if (vars != nullptr) {
       vars[row] = var;
@@ -83,15 +81,15 @@ __global__ void ker_layer_norm(T *ln_res, T *vars, T *means, const T *inp,
     float4 gamma = scale_f4[idx];
     float4 beta = bias_f4[idx];
 
-    val.w = (val.w - mean) * inv_std;
     val.x = (val.x - mean) * inv_std;
     val.y = (val.y - mean) * inv_std;
     val.z = (val.z - mean) * inv_std;
+    val.w = (val.w - mean) * inv_std;
 
-    val.w = val.w * gamma.w + beta.w;
     val.x = val.x * gamma.x + beta.x;
     val.y = val.y * gamma.y + beta.y;
     val.z = val.z * gamma.z + beta.z;
+    val.w = val.w * gamma.w + beta.w;
 
     out_f4[idx] = val;
   }
