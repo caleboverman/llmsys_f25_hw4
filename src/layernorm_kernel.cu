@@ -48,8 +48,17 @@ __global__ void ker_layer_norm(T *ln_res, T *vars, T *means, const T *inp,
   float4 *out_f4 = reinterpret_cast<float4 *>(ln_res) + row * vec_per_row;
 
   float stats[2] = {0.f, 0.f};
+  float4 cached_vals[32];
+  int cached_indices[32];
+  int cache_count = 0;
+
   for (int idx = threadIdx.x; idx < vec_per_row; idx += blockDim.x) {
     float4 val = inp_f4[idx];
+
+    cached_vals[cache_count] = val;
+    cached_indices[cache_count] = idx;
+    cache_count++;
+
     stats[0] += val.x + val.y + val.z + val.w;
     stats[1] += val.x * val.x + val.y * val.y + val.z * val.z + val.w * val.w;
   }
@@ -76,8 +85,9 @@ __global__ void ker_layer_norm(T *ln_res, T *vars, T *means, const T *inp,
   float mean = shared_mean;
   float inv_std = shared_rsqrt_var;
 
-  for (int idx = threadIdx.x; idx < vec_per_row; idx += blockDim.x) {
-    float4 val = inp_f4[idx];
+  for (int i = 0; i < cache_count; i++) {
+    int idx = cached_indices[i];
+    float4 val = cached_vals[i];
     float4 gamma = scale_f4[idx];
     float4 beta = bias_f4[idx];
 
