@@ -83,15 +83,15 @@ __global__ void ker_layer_norm(T *ln_res, T *vars, T *means, const T *inp,
     float4 gamma = scale_f4[idx];
     float4 beta = bias_f4[idx];
 
+    val.w = (val.w - mean) * inv_std;
     val.x = (val.x - mean) * inv_std;
     val.y = (val.y - mean) * inv_std;
     val.z = (val.z - mean) * inv_std;
-    val.w = (val.w - mean) * inv_std;
 
+    val.w = val.w * gamma.w + beta.w;
     val.x = val.x * gamma.x + beta.x;
     val.y = val.y * gamma.y + beta.y;
     val.z = val.z * gamma.z + beta.z;
-    val.w = val.w * gamma.w + beta.w;
 
     out_f4[idx] = val;
   }
@@ -198,27 +198,16 @@ __global__ void ker_ln_bw_dgamma_dbetta(T *gamma_grad, T *betta_grad,
                                         const T *means, int rows, int width) {
 
   /// BEGIN ASSIGN4_2_2
-  /// TODO
-  // Hints:
-  // 1. Compute the partial gradients by looping across inp rows
-  // 2. Store the partial gradients in the shared memory arrays
-  // 3. Compute the reduce sum of the shared memory arrays with g.shfl_down
-  //      -> More hints about `g.shfl_down`:
-  //      -> https://developer.nvidia.com/blog/cooperative-groups/#:~:text=Using%20thread_block_tile%3A%3Ashfl_down()%20to%20simplify%20our%20warp%2Dlevel%20reduction%20does%20benefit%20our%20code%3A%20it%20simplifies%20it%20and%20eliminates%20the%20need%20for%20shared%20memory
-  //      -> The highlighted line gives you a conceptual understanding of what the g.shfl_down is doing. Usually, the threads inside a block need to load everything to shared memory and work together to reduce the result (like what you have implemented in the hw1 for reduce function). 
-  //      -> Now g.shfl_down helps you do so without consuming any shared memory. g.shfl_down makes it more efficient.
-  // 4. Assign the final result to the correct position in the global output
-
   __shared__ float betta_buffer[TILE_DIM][TILE_DIM];
   __shared__ float gamma_buffer[TILE_DIM][TILE_DIM];
 
   cg::thread_block b = cg::this_thread_block();
   cg::thread_block_tile<TILE_DIM> g = cg::tiled_partition<TILE_DIM>(b);
 
-  // Step 1
   int col = blockIdx.x * TILE_DIM + threadIdx.x;
   float beta_partial = 0.f;
   float gamma_partial = 0.f;
+
   if (col < width) {
     for (int row = threadIdx.y; row < rows; row += blockDim.y) {
       int offset = row * width + col;
@@ -238,7 +227,6 @@ __global__ void ker_ln_bw_dgamma_dbetta(T *gamma_grad, T *betta_grad,
   gamma_buffer[threadIdx.y][threadIdx.x] = gamma_partial;
   __syncthreads();
 
-  // Step 2
   float beta_sum = 0.f;
   float gamma_sum = 0.f;
   if (col < width) {
@@ -249,9 +237,6 @@ __global__ void ker_ln_bw_dgamma_dbetta(T *gamma_grad, T *betta_grad,
   }
   __syncthreads();
 
-  // Step 3
-
-  // Step 4
   if (threadIdx.y == 0 && col < width) {
     betta_grad[col] = static_cast<T>(beta_sum);
     gamma_grad[col] = static_cast<T>(gamma_sum);
@@ -295,51 +280,38 @@ __global__ void ker_ln_bw_dinp(T *inp_grad, const T *out_grad, const T *inp,
                                const T *means, int hidden_dim) {
   
   /// BEGIN ASSIGN4_2_2
-  /// TODO
-  // Hints:
-  // 1. Compute dxhat=dy*w with reinterpret_cast by casting to float4 for speedup
-  // 2. Compute xhat with reinterpret_cast by casting to float4 for speedup
-  // 3. Compute reduce sum for dxhat and dxhat*xhat with blockReduce
-  // 4. Compute final gradient
-  
-  // Step 1
   int row = blockIdx.x;
   int vecs_per_row = hidden_dim;
   int elems_per_row = vecs_per_row * 4;
-
-  const float4 *out_grad_f4 = reinterpret_cast<const float4 *>(out_grad) +
-                              row * vecs_per_row;
-  const float4 *inp_f4 = reinterpret_cast<const float4 *>(inp) +
-                          row * vecs_per_row;
+  const float4 *out_grad_f4 = reinterpret_cast<const float4 *>(out_grad) + row * vecs_per_row;
+  const float4 *inp_f4 = reinterpret_cast<const float4 *>(inp) + row * vecs_per_row;
   const float4 *gamma_f4 = reinterpret_cast<const float4 *>(gamma);
-  float4 *inp_grad_f4 = reinterpret_cast<float4 *>(inp_grad) +
-                        row * vecs_per_row;
+  float4 *inp_grad_f4 = reinterpret_cast<float4 *>(inp_grad) + row * vecs_per_row;
 
   float mean = means ? static_cast<float>(means[row]) : 0.f;
   float var = vars ? static_cast<float>(vars[row]) : 0.f;
   float inv_std = rsqrtf(var + LN_EPSILON);
-
   float sums[2] = {0.f, 0.f};
+
   for (int idx = threadIdx.x; idx < vecs_per_row; idx += blockDim.x) {
     float4 dy = out_grad_f4[idx];
     float4 g = gamma_f4[idx];
     float4 x = inp_f4[idx];
 
     float4 dxhat;
+    dxhat.w = dy.w * g.w;
     dxhat.x = dy.x * g.x;
     dxhat.y = dy.y * g.y;
     dxhat.z = dy.z * g.z;
-    dxhat.w = dy.w * g.w;
 
     float4 xhat;
+    xhat.w = (x.w - mean) * inv_std;
     xhat.x = (x.x - mean) * inv_std;
     xhat.y = (x.y - mean) * inv_std;
     xhat.z = (x.z - mean) * inv_std;
-    xhat.w = (x.w - mean) * inv_std;
 
     sums[0] += dxhat.x + dxhat.y + dxhat.z + dxhat.w;
-    sums[1] += dxhat.x * xhat.x + dxhat.y * xhat.y + dxhat.z * xhat.z +
-               dxhat.w * xhat.w;
+    sums[1] += dxhat.x * xhat.x + dxhat.y * xhat.y + dxhat.z * xhat.z + dxhat.w * xhat.w;
   }
 
   blockReduce<ReduceType::kSum, 2>(sums);
@@ -356,35 +328,31 @@ __global__ void ker_ln_bw_dinp(T *inp_grad, const T *out_grad, const T *inp,
   float mean_dxhat = shared_dxhat * inv_hidden;
   float mean_dxhat_xhat = shared_dxhat_xhat * inv_hidden;
  
-  // Step 2
   for (int idx = threadIdx.x; idx < vecs_per_row; idx += blockDim.x) {
     float4 dy = out_grad_f4[idx];
     float4 g = gamma_f4[idx];
     float4 x = inp_f4[idx];
 
     float4 dxhat;
+    dxhat.w = dy.w * g.w;
     dxhat.x = dy.x * g.x;
     dxhat.y = dy.y * g.y;
     dxhat.z = dy.z * g.z;
-    dxhat.w = dy.w * g.w;
 
     float4 xhat;
+    xhat.w = (x.w - mean) * inv_std;
     xhat.x = (x.x - mean) * inv_std;
     xhat.y = (x.y - mean) * inv_std;
     xhat.z = (x.z - mean) * inv_std;
-    xhat.w = (x.w - mean) * inv_std;
 
     float4 dinp;
+    dinp.w = (dxhat.w - mean_dxhat - xhat.w * mean_dxhat_xhat) * inv_std;
     dinp.x = (dxhat.x - mean_dxhat - xhat.x * mean_dxhat_xhat) * inv_std;
     dinp.y = (dxhat.y - mean_dxhat - xhat.y * mean_dxhat_xhat) * inv_std;
     dinp.z = (dxhat.z - mean_dxhat - xhat.z * mean_dxhat_xhat) * inv_std;
-    dinp.w = (dxhat.w - mean_dxhat - xhat.w * mean_dxhat_xhat) * inv_std;
 
     inp_grad_f4[idx] = dinp;
   }
-
-  // Step 3
-  // Step 4 handled within loop
   /// END ASSIGN4_2_2
 }
 extern "C" {

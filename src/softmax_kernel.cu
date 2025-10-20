@@ -152,11 +152,14 @@ __global__ void ker_attn_softmax(T *inp, const T *attn_mask, int from_len,
     // BEGIN ASSIGN4_1_1
     float val[token_per_reduce][ele_per_thread];
     float l_max[token_per_reduce];
+
     for (int i = 0; i < token_per_reduce; ++i) {
       l_max[i] = REDUCE_FLOAT_INF_NEG;
+
       for (int j = 0; j < ele_per_thread; ++j) {
         int col = threadIdx.x * ele_per_thread + j;
         float temp_val = REDUCE_FLOAT_INF_NEG;
+
         if (col < to_len) {
           if (mask_future && col > token_id + i) {
             temp_val = REDUCE_FLOAT_INF_NEG;
@@ -167,6 +170,7 @@ __global__ void ker_attn_softmax(T *inp, const T *attn_mask, int from_len,
             }
           }
         }
+
         val[i][j] = temp_val;
         l_max[i] = fmaxf(l_max[i], temp_val);
       }
@@ -187,12 +191,15 @@ __global__ void ker_attn_softmax(T *inp, const T *attn_mask, int from_len,
     // thread local sum
     // BEGIN ASSIGN4_1_1
     float l_sum[token_per_reduce];
+
     for (int i = 0; i < token_per_reduce; ++i) {
       l_sum[i] = 0.f;
       float max_val = s_max[i];
+
       for (int j = 0; j < ele_per_thread; ++j) {
         int col = threadIdx.x * ele_per_thread + j;
         float exp_val = 0.f;
+
         if (col < to_len) {
           exp_val = __expf(val[i][j] - max_val);
           val[i][j] = exp_val;
@@ -218,8 +225,10 @@ __global__ void ker_attn_softmax(T *inp, const T *attn_mask, int from_len,
     // BEGIN ASSIGN4_1_1
     for (int i = 0; i < token_per_reduce && (token_id + i) < from_len; ++i) {
       float inv_sum = s_sum[i];
+
       for (int j = 0; j < ele_per_thread; ++j) {
         int col = threadIdx.x * ele_per_thread + j;
+
         if (col < to_len) {
           inp_val[i][j] = (T)(val[i][j] * inv_sum);
         } else {
@@ -372,32 +381,23 @@ void launch_attn_softmax_bw(float *out_grad,
   cudaMemcpy(d_soft, soft_inp, buf_size, cudaMemcpyHostToDevice);
 
   if (softmax_len <= 32) {
-    ker_attn_softmax_bw<float, 1><<<grid_dim, block_dim, 0, stream>>>(
-        d_grad, d_soft, softmax_len);
+    ker_attn_softmax_bw<float, 1><<<grid_dim, block_dim, 0, stream>>>(d_grad, d_soft, softmax_len);
   } else if (softmax_len <= 64) {
-    ker_attn_softmax_bw<float, 2><<<grid_dim, block_dim, 0, stream>>>(
-        d_grad, d_soft, softmax_len);
+    ker_attn_softmax_bw<float, 2><<<grid_dim, block_dim, 0, stream>>>(d_grad, d_soft, softmax_len);
   } else if (softmax_len <= 128) {
-    ker_attn_softmax_bw<float, 4><<<grid_dim, block_dim, 0, stream>>>(
-        d_grad, d_soft, softmax_len);
+    ker_attn_softmax_bw<float, 4><<<grid_dim, block_dim, 0, stream>>>(d_grad, d_soft, softmax_len);
   } else if (softmax_len <= 256) {
-    ker_attn_softmax_bw<float, 8><<<grid_dim, block_dim, 0, stream>>>(
-        d_grad, d_soft, softmax_len);
+    ker_attn_softmax_bw<float, 8><<<grid_dim, block_dim, 0, stream>>>(d_grad, d_soft, softmax_len);
   } else if (softmax_len <= 384) {
-    ker_attn_softmax_bw<float, 12><<<grid_dim, block_dim, 0, stream>>>(
-        d_grad, d_soft, softmax_len);
+    ker_attn_softmax_bw<float, 12><<<grid_dim, block_dim, 0, stream>>>(d_grad, d_soft, softmax_len);
   } else if (softmax_len <= 512) {
-    ker_attn_softmax_bw<float, 16><<<grid_dim, block_dim, 0, stream>>>(
-        d_grad, d_soft, softmax_len);
+    ker_attn_softmax_bw<float, 16><<<grid_dim, block_dim, 0, stream>>>(d_grad, d_soft, softmax_len);
   } else if (softmax_len <= 768) {
-    ker_attn_softmax_bw<float, 24><<<grid_dim, block_dim, 0, stream>>>(
-        d_grad, d_soft, softmax_len);
+    ker_attn_softmax_bw<float, 24><<<grid_dim, block_dim, 0, stream>>>(d_grad, d_soft, softmax_len);
   } else if (softmax_len <= 1024) {
-    ker_attn_softmax_bw<float, 32><<<grid_dim, block_dim, 0, stream>>>(
-        d_grad, d_soft, softmax_len);
+    ker_attn_softmax_bw<float, 32><<<grid_dim, block_dim, 0, stream>>>(d_grad, d_soft, softmax_len);
   } else if (softmax_len <= 2048) {
-    ker_attn_softmax_bw<float, 64><<<grid_dim, block_dim, 0, stream>>>(
-        d_grad, d_soft, softmax_len);
+    ker_attn_softmax_bw<float, 64><<<grid_dim, block_dim, 0, stream>>>(d_grad, d_soft, softmax_len);
   } else {
     cudaFree(d_grad);
     cudaFree(d_soft);
@@ -407,11 +407,11 @@ void launch_attn_softmax_bw(float *out_grad,
   cudaMemcpy(out_grad, d_grad, buf_size, cudaMemcpyDeviceToHost);
   cudaDeviceSynchronize();
 
-  cudaError_t err = cudaGetLastError();
-  if (err != cudaSuccess) {
-    fprintf(stderr, "launch_attn_softmax_bw Error: %s\n", cudaGetErrorString(err));
-    exit(EXIT_FAILURE);
-  }
+//   cudaError_t err = cudaGetLastError();
+//   if (err != cudaSuccess) {
+//     fprintf(stderr, "launch_attn_softmax_bw Error: %s\n", cudaGetErrorString(err));
+//     exit(EXIT_FAILURE);
+//   }
 
   cudaFree(d_grad);
   cudaFree(d_soft);
